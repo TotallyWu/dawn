@@ -1,7 +1,22 @@
 #ifndef _DAWN_H_
 #define _DAWN_H_
 
-#include <stdint.h>
+
+#ifndef uint32_t
+typedef unsigned int uint32_t;
+#endif
+
+#ifndef int32_t
+typedef int int32_t;
+#endif
+
+#ifndef uint16_t
+typedef unsigned short uint16_t;
+#endif
+
+#ifndef uint8_t
+typedef unsigned char uint8_t;
+#endif
 
 typedef enum _dawn_state_t{
     DAWN_STATE_IDLE,
@@ -11,21 +26,24 @@ typedef enum _dawn_state_t{
 }dawn_state_t;
 
 
-typedef int32_t (*dawn_read)(void *buf, uint16_t *len, uint16_t timeout_ms);
-typedef int32_t (*dawn_write)(void *buf, uint16_t *len, uint16_t timeout_ms);
+typedef int32_t (*dawn_read)(void *buf, uint16_t len, uint16_t timeout_ms);
+typedef int32_t (*dawn_write)(void *buf, uint16_t len);
 
 typedef struct _dawn_context_t{
     dawn_state_t state;
     uint16_t mtu;
     uint16_t index;
-    
+
     struct {
         void *buf;
         uint16_t len;
-    }*user_data;
+        uint16_t remain;
+    }user_data;
 
     dawn_read read;
     dawn_write write;
+    uint16_t timeout_ms;
+    uint8_t retry_times;
 }dawn_context_t;
 
 
@@ -34,5 +52,15 @@ typedef struct _dawn_context_t{
                         free(p);\
                     }while(0)
 
+#define SYN 0x22
+#define ACK 0x06
+#define HANG_UP  0x04
+
+
+enum{
+    DAWN_ERR_SEND_FAILED = -2019,
+    DAWN_ERR_RECV_FAILED ,
+    DAWN_ERR_OOM ,
+};
 
 #endif
