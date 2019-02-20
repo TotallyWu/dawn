@@ -60,7 +60,6 @@ int32_t dawn_init_context(dawn_context_t *ctx, dawn_read read, dawn_write write)
 
 int32_t _dawn_send_mtu(dawn_context_t *ctx){
     int32_t ret = 0;
-    uint16_t count = 0;
     uint8_t *data;
 
     if (NULL==ctx ||ctx->user_data.buf == NULL || ctx->user_data.len == 0 || ctx->write == NULL) {
@@ -157,7 +156,7 @@ int32_t dawn_transfer(dawn_context_t *ctx, void *data, uint16_t len){
 
     count = (len + (ctx->mtu-1)) / ctx->mtu;
 
-    for(size_t i = 0; i < count; i++)
+    for(uint16_t i = 0; i < count; i++)
     {
         ctx->user_data.remain = count-i-1;
         ctx->user_data.buf = pData;
@@ -195,7 +194,6 @@ int32_t dawn_transfer(dawn_context_t *ctx, void *data, uint16_t len){
 int32_t _dawn_receive_mtu(dawn_context_t *ctx)
 {
     int32_t ret = 0;
-    uint16_t count = 0;
     uint8_t *pData = (uint8_t *)ctx->user_data.buf;
     uint16_t exp_len ;
 
@@ -228,10 +226,9 @@ int32_t _dawn_receive_mtu(dawn_context_t *ctx)
 
 int32_t dawn_receive(dawn_context_t *ctx){
     int32_t ret = 0;
-    uint16_t count = 0;
     uint8_t *pData = ctx->user_data.buf;
     uint16_t len = ctx->user_data.len;
-    uint8_t *tmp;
+    uint8_t *tmp=NULL;
     uint16_t tmp_len = 0;
 
     if (NULL==ctx ||NULL == ctx->user_data.buf || ctx->user_data.len == 0 || ctx->write == NULL ||ctx->read == NULL) {
@@ -288,10 +285,4 @@ int32_t dawn_receive(dawn_context_t *ctx){
     out:
     dawn_free(tmp);
     return ret;
-}
-
-
-int main(void)
-{
-    return 0;
 }

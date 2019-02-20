@@ -49,7 +49,9 @@ typedef struct _dawn_context_t{
 
 #define dawn_alloc(size) malloc(size)
 #define dawn_free(p) do{ \
-                        free(p);\
+                        if (NULL == (p)) {\
+                            free(p);\
+                        }\
                     }while(0)
 
 #define SYN 0x22
@@ -63,4 +65,9 @@ enum{
     DAWN_ERR_OOM ,
 };
 
+int32_t dawn_init_context(dawn_context_t *ctx, dawn_read read, dawn_write write);
+
+int32_t dawn_transfer(dawn_context_t *ctx, void *data, uint16_t len);
+
+int32_t dawn_receive(dawn_context_t *ctx);
 #endif
