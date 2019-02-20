@@ -32,7 +32,7 @@ int32_t dawn_example_slave_read(void *buf, uint16_t len, uint16_t timeout_ms)
     fd_set rfds;
     struct timeval tv;
     int retval;
-    uint8_t p_buf = (uint8_t *)buf;
+    uint8_t *p_buf = (uint8_t *)buf;
     uint16_t offset = 0;
 
     if (socketfd <= 2) {
@@ -72,7 +72,6 @@ int32_t dawn_example_slave_read(void *buf, uint16_t len, uint16_t timeout_ms)
     }while(offset < len);
 
     ret = offset;
-	 out:
 	 return ret;
  }
 
@@ -95,33 +94,32 @@ int32_t dawn_example_slave_read(void *buf, uint16_t len, uint16_t timeout_ms)
          }
      } while (offset<len);
 
-	 out:
 	 return ret;
  }
 
 
  int main(int argc,char **argv)
  {
-    char *servInetAddr = "127.0.0.1";
+    char *servInetAddr = (char *)"127.0.0.1";
     struct sockaddr_in sockaddr;
-    char recvline[MAXLINE], sendline[MAXLINE];
-    int n;
     int opt = 1;
     int port = 1111;
 
-    if(argc != 5)
-    {
-        print_usage();
-        exit(0);
-    }
+    // if(argc != 5)
+    // {
+    //     print_usage();
+    //     exit(0);
+    // }
+    print_usage();
 
     do
     {
         if (argv[opt] ==NULL ||
         argv[opt][0] != '-'||
         argv[opt][2] != 0) {
-            print_usage();
-            exit(0);
+            // print_usage();
+            // exit(0);
+            break;
         }
 
         switch (argv[opt][1])
@@ -176,7 +174,7 @@ int32_t dawn_example_slave_read(void *buf, uint16_t len, uint16_t timeout_ms)
             return 0;
         }
 
-        str = "Hello Iris!\r\n";
+        str = (char *)"Hello Iris!\r\n";
         ret = dawn_transfer(&dawn_slave, str, strlen(str));
         if (0!=ret) {
             printf("dawn_transfer failed:%d\r\n", ret);
@@ -192,7 +190,7 @@ int32_t dawn_example_slave_read(void *buf, uint16_t len, uint16_t timeout_ms)
             return 0;
         }
 
-        printf("master receive:%s\r\n", dawn_slave.user_data.buf);
+        printf("master receive:%s\r\n", (char *)dawn_slave.user_data.buf);
         close(socketfd);
     }
  }

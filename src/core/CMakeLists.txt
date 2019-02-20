@@ -9,4 +9,5 @@ SET(SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/dawn.c
     )
 
-add_executable(${PROJECT_NAME} ${SOURCES})
+#add_executable(${PROJECT_NAME} ${SOURCES})
+add_library(dawn ${SOURCES})

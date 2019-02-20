@@ -23,7 +23,7 @@ int listenfd,connfd = -1;
     fd_set rfds;
     struct timeval tv;
     int retval;
-    uint8_t p_buf = (uint8_t *)buf;
+    uint8_t *p_buf = (uint8_t *)buf;
     uint16_t offset = 0;
 
     if (connfd <= 2) {
@@ -63,7 +63,6 @@ int listenfd,connfd = -1;
     }while(offset < len);
 
     ret = offset;
-	 out:
 	 return ret;
  }
 
@@ -86,21 +85,51 @@ int listenfd,connfd = -1;
          }
      } while (offset<len);
 
-	 out:
 	 return ret;
  }
 
+ void print_usage(void)
+ {
+     fprintf(stdout, "master usage\r\n");
+     fprintf(stdout, "master [option]\r\n");
+     fprintf(stdout, "-p port, default is 2222 \r\n");
+ }
 
- int main(int argc,char **argv)
+ int main(int argc, char **argv)
  {
     struct sockaddr_in sockaddr;
-    char buff[MAXLINE];
-    int n;
+    int opt = 1;
+    int port = 1111;
+
+    do
+    {
+        if (argv[opt] ==NULL ||
+        argv[opt][0] != '-'||
+        argv[opt][2] != 0) {
+            print_usage();
+            break;
+        }
+
+        switch (argv[opt][1])
+        {
+            case 'p':
+                opt++;
+                 if (opt>argc) {
+                    print_usage();
+                    exit(0);
+                }
+                port = atoi(argv[opt]);
+                break;
+            default:
+                print_usage();
+                break;
+        }
+    } while (opt<argc);
 
     memset(&sockaddr,0,sizeof(sockaddr));
     sockaddr.sin_family = AF_INET;
     sockaddr.sin_addr.s_addr = htonl(INADDR_ANY);
-    sockaddr.sin_port = htons(argv[1]);
+    sockaddr.sin_port = htons(port);
     listenfd = socket(AF_INET,SOCK_STREAM,0);
     bind(listenfd,(struct sockaddr *) &sockaddr,sizeof(sockaddr));
     listen(listenfd,1024);
@@ -129,12 +158,7 @@ int listenfd,connfd = -1;
                 return 0;
             }
 
-            str = "Hello ALex!\r\n";
-            ret = dawn_transfer(&dawn_master, str, strlen(str));
-            if (0!=ret) {
-                printf("dawn_transfer failed:%d\r\n", ret);
-                return 0;
-            }
+            printf("new connection comming......\r\n");
 
             dawn_master.user_data.buf = buf;
             dawn_master.user_data.len = MAXLINE;
@@ -145,7 +169,15 @@ int listenfd,connfd = -1;
                 return 0;
             }
 
-            printf("master receive:%s\r\n", dawn_master.user_data.buf);
+            printf("master receive:%s\r\n", (char *)dawn_master.user_data.buf);
+
+            str = (char *)"Hello ALex!\r\n";
+            ret = dawn_transfer(&dawn_master, str, strlen(str));
+            if (0!=ret) {
+                printf("dawn_transfer failed:%d\r\n", ret);
+                return 0;
+            }
+
             close(connfd);
         }
 

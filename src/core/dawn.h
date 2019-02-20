@@ -49,7 +49,9 @@ typedef struct _dawn_context_t{
 
 #define dawn_alloc(size) malloc(size)
 #define dawn_free(p) do{ \
-                        free(p);\
+                        if (NULL == (p)) {\
+                            free(p);\
+                        }\
                     }while(0)
 
 #define SYN 0x22
