@@ -1,6 +1,6 @@
 cmake_minimum_required (VERSION 3.0)
 
-project (dawn_slave C)
+project (slave C)
 
 INCLUDE_DIRECTORIES(../../core)
 
