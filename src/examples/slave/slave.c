@@ -13,6 +13,7 @@
 #include <unistd.h>
 
 #include "dawn.h"
+#include "platform.h"
 
  #define MAXLINE 1024
 
@@ -21,7 +22,7 @@
      fprintf(stdout, "slave usage\r\n");
      fprintf(stdout, "slave [option]\r\n");
      fprintf(stdout, "-h host, default is 127.0.0.1 \r\n");
-     fprintf(stdout, "-p port, default is 1111 \r\n");
+     fprintf(stdout, "-p port, default is 6666 \r\n");
  }
 
 int socketfd = -1;
@@ -39,8 +40,6 @@ int32_t dawn_example_slave_read(void *buf, uint16_t len, uint16_t timeout_ms)
         return -1;
     }
 
-    /* Watch stdin (fd 0) to see when it has input. */
-
     FD_ZERO(&rfds);
     FD_SET(socketfd, &rfds);
 
@@ -49,7 +48,7 @@ int32_t dawn_example_slave_read(void *buf, uint16_t len, uint16_t timeout_ms)
         tv.tv_sec = timeout_ms / 1000;
         tv.tv_usec = (timeout_ms % 1000)*1000;
 
-        retval = select(1, &rfds, NULL, NULL, &tv);
+        retval = select(socketfd+1, &rfds, NULL, NULL, &tv);
         /* Don't rely on the value of tv now! */
 
         if (retval == -1){
@@ -57,16 +56,13 @@ int32_t dawn_example_slave_read(void *buf, uint16_t len, uint16_t timeout_ms)
             break;
         }
         else if (retval){
-            printf("Data is available now.\n");
-            ret = read(socketfd, p_buf+offset, len-offset);
-
+            ret = recv(socketfd, p_buf+offset, len-offset,0);
             if (ret > 0) {
                 offset += ret;
             }
         }
-            /* FD_ISSET(0, &rfds) will be true. */
         else{
-            printf("No data within five seconds.\n");
+            dawn_printf("No data within five seconds.\n");
             break;
         }
     }while(offset < len);
@@ -87,11 +83,12 @@ int32_t dawn_example_slave_read(void *buf, uint16_t len, uint16_t timeout_ms)
 
      do
      {
-         ret = send(socketfd, buf+offset, len-offset, 0);
+         ret = send(socketfd, buf+offset, len-offset, MSG_CONFIRM);
 
          if (ret > 0) {
              offset += ret;
          }
+
      } while (offset<len);
 
 	 return ret;
@@ -144,6 +141,8 @@ int32_t dawn_example_slave_read(void *buf, uint16_t len, uint16_t timeout_ms)
             default:
                 break;
         }
+
+        opt++;
     } while (opt<argc);
 
 
@@ -152,7 +151,6 @@ int32_t dawn_example_slave_read(void *buf, uint16_t len, uint16_t timeout_ms)
     sockaddr.sin_family = AF_INET;
     sockaddr.sin_port = htons(port);
     inet_pton(AF_INET,servInetAddr,&sockaddr.sin_addr);
-
     if((connect(socketfd,(struct sockaddr*)&sockaddr,sizeof(sockaddr))) < 0 )
     {
         printf("connect error %s errno: %d\n",strerror(errno),errno);
@@ -164,7 +162,7 @@ int32_t dawn_example_slave_read(void *buf, uint16_t len, uint16_t timeout_ms)
         int ret = 0;
         uint8_t buf[MAXLINE];
 
-        dawn_slave.mtu = 128;
+        dawn_slave.mtu = 10;
         dawn_slave.retry_times = 3;
         dawn_slave.timeout_ms = 1000*10;
         dawn_slave.state = 0;
@@ -174,7 +172,7 @@ int32_t dawn_example_slave_read(void *buf, uint16_t len, uint16_t timeout_ms)
             return 0;
         }
 
-        str = (char *)"Hello Iris!\r\n";
+        str = (char *)"Hello Iris! \nAre you okay? \nI have lots of things to talk with you.\r\n";
         ret = dawn_transfer(&dawn_slave, str, strlen(str));
         if (0!=ret) {
             printf("dawn_transfer failed:%d\r\n", ret);
@@ -185,12 +183,12 @@ int32_t dawn_example_slave_read(void *buf, uint16_t len, uint16_t timeout_ms)
         dawn_slave.user_data.len = MAXLINE;
         ret = dawn_receive(&dawn_slave);
 
-        if (0>=ret) {
+        if (0!=ret) {
             printf("dawn_receive failed:%d\r\n", ret);
             return 0;
         }
 
-        printf("master receive:%s\r\n", (char *)dawn_slave.user_data.buf);
+        printf("slave receive:%s\r\n", (char *)dawn_slave.user_data.buf);
         close(socketfd);
     }
  }

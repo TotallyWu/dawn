@@ -10,7 +10,8 @@
 #include <sys/time.h>
 #include <unistd.h>
 
- #include "../../core/dawn.h"
+ #include "dawn.h"
+ #include "platform.h"
 
 
 int listenfd,connfd = -1;
@@ -30,8 +31,6 @@ int listenfd,connfd = -1;
         return -1;
     }
 
-    /* Watch stdin (fd 0) to see when it has input. */
-
     FD_ZERO(&rfds);
     FD_SET(connfd, &rfds);
 
@@ -40,24 +39,21 @@ int listenfd,connfd = -1;
         tv.tv_sec = timeout_ms / 1000;
         tv.tv_usec = (timeout_ms % 1000)*1000;
 
-        retval = select(1, &rfds, NULL, NULL, &tv);
+        retval = select(connfd+1, &rfds, NULL, NULL, &tv);
         /* Don't rely on the value of tv now! */
 
         if (retval == -1){
-            perror("select()");
+            dawn_printf("select()");
             break;
         }
         else if (retval){
-            printf("Data is available now.\n");
-            ret = read(connfd, p_buf+offset, len-offset);
-
+            ret = recv(connfd, p_buf+offset, len-offset, 0);
             if (ret > 0) {
                 offset += ret;
             }
         }
-            /* FD_ISSET(0, &rfds) will be true. */
         else{
-            printf("No data within five seconds.\n");
+            dawn_printf("No data within five seconds.\n");
             break;
         }
     }while(offset < len);
@@ -78,7 +74,7 @@ int listenfd,connfd = -1;
 
      do
      {
-         ret = send(connfd, buf+offset, len-offset, 0);
+         ret = send(connfd, buf+offset, len-offset, MSG_CONFIRM);
 
          if (ret > 0) {
              offset += ret;
@@ -92,7 +88,7 @@ int listenfd,connfd = -1;
  {
      fprintf(stdout, "master usage\r\n");
      fprintf(stdout, "master [option]\r\n");
-     fprintf(stdout, "-p port, default is 2222 \r\n");
+     fprintf(stdout, "-p port, default is 6666 \r\n");
  }
 
  int main(int argc, char **argv)
@@ -124,8 +120,11 @@ int listenfd,connfd = -1;
                 print_usage();
                 break;
         }
+
+        opt++;
     } while (opt<argc);
 
+    printf("set up host with port:%d\r\n", port);
     memset(&sockaddr,0,sizeof(sockaddr));
     sockaddr.sin_family = AF_INET;
     sockaddr.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -134,10 +133,10 @@ int listenfd,connfd = -1;
     bind(listenfd,(struct sockaddr *) &sockaddr,sizeof(sockaddr));
     listen(listenfd,1024);
 
-    printf("Please wait for the client information\n");
 
     for(;;)
     {
+        printf("Please wait for the client information\n");
         if((connfd = accept(listenfd,(struct sockaddr*)NULL,NULL))==-1)
         {
             printf("accpet socket error: %s errno :%d\n",strerror(errno),errno);
@@ -164,14 +163,15 @@ int listenfd,connfd = -1;
             dawn_master.user_data.len = MAXLINE;
             ret = dawn_receive(&dawn_master);
 
-            if (0>=ret) {
+            if (0!=ret) {
                 printf("dawn_receive failed:%d\r\n", ret);
                 return 0;
             }
 
+            dawn_print_hex("master recv:", dawn_master.user_data.buf, dawn_master.user_data.len);
             printf("master receive:%s\r\n", (char *)dawn_master.user_data.buf);
 
-            str = (char *)"Hello ALex!\r\n";
+            str = (char *)"Hello ALex! \nI am fine and you\nI would like to hear you with pleasure\r\n";
             ret = dawn_transfer(&dawn_master, str, strlen(str));
             if (0!=ret) {
                 printf("dawn_transfer failed:%d\r\n", ret);
