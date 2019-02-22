@@ -18,4 +18,5 @@ SET(SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/master.c
     )
 
+link_libraries(libpthread.so)
 add_executable(${PROJECT_NAME} ${SOURCES} ${DAWN_SOURCES})

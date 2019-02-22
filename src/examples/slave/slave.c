@@ -11,11 +11,17 @@
  #include <unistd.h>
  #include <sys/time.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 #include "dawn.h"
 #include "platform.h"
 
  #define MAXLINE 1024
+#define ERR_RANDOM    -100
+#define ERR_OOM    -101
+#define ERR_TRANSFER    -102
+#define ERR_RECV    -103
+#define ERR_MISMATCH    -104
 
  void print_usage(void)
  {
@@ -95,12 +101,116 @@ int32_t dawn_example_slave_read(void *buf, uint16_t len, uint16_t timeout_ms)
  }
 
 
+int random_gen(void *p, uint16_t len){
+    int ret = 0;
+    int fd = 0;
+    fd = open("/dev/random", O_RDWR);
+
+    if (fd <= 2) {
+        return -1;
+    }
+
+    ret = read(fd, p, len);
+    close(fd);
+
+    return ret;
+}
+
+int stress_test(dawn_context_t *ctx){
+    int ret = 0;
+    uint8_t *data;
+    uint16_t len = 0;
+    uint8_t *recv_data;
+
+    if (ctx == NULL) {
+        exit(0);
+    }
+
+    ret = random_gen(&len, sizeof(uint16_t));
+
+    if (ret != sizeof(uint16_t)) {
+        ret =  ERR_RANDOM;
+        goto out;
+    }
+
+    data = (uint8_t *)malloc(len);
+    ret = random_gen(data, len);
+
+    if (ret != len) {
+        ret = ERR_RANDOM;
+        goto out;
+    }
+
+    ret = dawn_transfer(ctx, data, len);
+
+    if (ret != 0) {
+        ret = ERR_TRANSFER;
+        goto out;
+    }
+
+    dawn_print_hex("data transfered!\n", data, len);
+    recv_data = (uint8_t *)malloc(len);
+    ctx->user_data.buf = recv_data;
+    ctx->user_data.len = len;
+    ret = dawn_receive(ctx);
+    if (ret!=0) {
+        ret = ERR_RECV;
+        goto out;
+    }
+
+    dawn_print_hex("recv data:\n", ctx->user_data.buf, ctx->user_data.len);
+
+    if (ctx->user_data.len != len) {
+        ret = ERR_MISMATCH;
+        goto out;
+    }
+
+    if (memcmp(data, ctx->user_data.len,len)) {
+        ret = ERR_MISMATCH;
+        goto out;
+    }
+
+out:
+    dawn_free(data);
+    dawn_free(recv_data);
+
+    return ret;
+}
+typedef struct _st{
+                    int total;
+                    int suc;
+                    int fail;
+                    int fail_random;
+                    int fail_oom;
+                    int fail_transfer;
+                    int fail_recv;
+                    int fail_mismatch;
+                }statistic_t;
+
+void show_statistic(statistic_t *st){
+    if (st ==NULL) {
+        return;
+    }
+
+    printf("#########################################################\r\n");
+    printf("    Total:%d\r\n", st->total);
+    printf("    Success:%d  [%f\%]\r\n", st->total, (st->suc*1.0 / st->total)*100);
+    printf("    Failed:%d  [%f\%]\r\n", st->fail, (st->fail*1.0 / st->total)*100);
+    printf("    Random Failed:%d  [%f\%]\r\n", st->fail_random, (st->fail_random*1.0 / st->total)*100);
+    printf("    OOM Failed:%d  [%f\%]\r\n", st->fail_oom, (st->fail_oom*1.0 / st->total)*100);
+    printf("    Transfer Failed:%d  [%f\%]\r\n", st->fail_transfer, (st->fail_transfer*1.0 / st->total)*100);
+    printf("    Recv Failed:%d  [%f\%]\r\n", st->fail_recv, (st->fail_recv*1.0 / st->total)*100);
+    printf("    Mismatch Failed:%d  [%f\%]\r\n", st->fail_mismatch, (st->fail_mismatch*1.0 / st->total)*100);
+    printf("########################################################\r\n");
+}
+
  int main(int argc,char **argv)
  {
     char *servInetAddr = (char *)"127.0.0.1";
     struct sockaddr_in sockaddr;
     int opt = 1;
     int port = 1111;
+    int test_type = 0;
 
     // if(argc != 5)
     // {
@@ -138,6 +248,14 @@ int32_t dawn_example_slave_read(void *buf, uint16_t len, uint16_t timeout_ms)
                 }
                 port = atoi(argv[opt]);
                 break;
+            case 't':
+                opt++;
+                 if (opt>argc) {
+                    print_usage();
+                    exit(0);
+                }
+                test_type = atoi(argv[opt]);
+                break;
             default:
                 break;
         }
@@ -160,12 +278,60 @@ int32_t dawn_example_slave_read(void *buf, uint16_t len, uint16_t timeout_ms)
         dawn_context_t dawn_slave;
         char *str;
         int ret = 0;
-        uint8_t buf[MAXLINE];
+        statistic_t st;
 
         dawn_slave.mtu = 10;
         dawn_slave.retry_times = 3;
         dawn_slave.timeout_ms = 1000*10;
         dawn_slave.state = 0;
+
+        switch(test_type) {
+            default:
+            case 0: //normal mode
+
+            break;
+            case 1://stress test mode
+                memset(&st, 0x00, sizeof(st));
+                do
+                {
+                    st.total++;
+                    ret = stress_test(&dawn_slave);
+
+                    switch (ret)
+                    {
+                        case 0:
+                            st.suc++;
+                            break;
+                        case ERR_OOM:
+                            st.fail_oom++;
+                            break;
+                        case ERR_RANDOM:
+                            st.fail_random++;
+                            break;
+                        case ERR_TRANSFER:
+                            st.fail_transfer++;
+                            break;
+                        case ERR_RECV:
+                            st.fail_recv++;
+                            break;
+                        case ERR_MISMATCH:
+                            st.fail_mismatch++;
+                            break;
+                        default:
+                            dawn_printf("uknow code:%d\n", ret);
+                            st.fail++;
+                            break;
+                    }
+
+                    show_statistic(&st);
+                    sleep(1);
+                } while (1);
+
+            break;
+        }
+
+        uint8_t buf[MAXLINE];
+
         ret = dawn_init_context(&dawn_slave, dawn_example_slave_read, dawn_example_slave_write);
         if (0!=ret) {
             printf("dawn_init_context failed:%d\r\n", ret);
