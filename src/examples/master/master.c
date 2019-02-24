@@ -3,6 +3,7 @@
 #include <sys/types.h>
 #include <string.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <unistd.h>
@@ -10,6 +11,7 @@
 #include <sys/time.h>
 #include <unistd.h>
 #include <pthread.h>
+
 
  #include "dawn.h"
  #include "platform.h"
@@ -116,25 +118,11 @@ int listenfd,connfd = -1;
     printf("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\n");
  }
 
- void *stress_test(void *argv)
+ void *stress_test(dawn_context_t *dawn_master)
  {
-    dawn_context_t dawn_master;
     int ret = 0;
-    uint8_t buf[MAXLINE];
     statistics_t st;
 
-    dawn_master.mtu = 128;
-    dawn_master.retry_times = 3;
-    dawn_master.timeout_ms = 1000*10;
-    dawn_master.state = 0;
-    ret = dawn_init_context(&dawn_master, dawn_example_master_read, dawn_example_master_write);
-    if (0!=ret) {
-        printf("dawn_init_context failed:%d\r\n", ret);
-        return 0;
-    }
-
-    dawn_master.user_data.buf = buf;
-    dawn_master.user_data.len = MAXLINE;
     memset(&st, 0x00, sizeof(st));
     do
     {
@@ -142,7 +130,7 @@ int listenfd,connfd = -1;
         printf("#######################################################################\r\n");
         printf("                    Round#%d\r\n", st.total);
         printf("#######################################################################\r\n");
-        ret = dawn_receive(&dawn_master);
+        ret = dawn_receive(dawn_master);
 
         if (0!=ret) {
             st.failed++;
@@ -151,10 +139,10 @@ int listenfd,connfd = -1;
             continue;
         }
 
-        dawn_print_hex("master recv:", dawn_master.user_data.buf, dawn_master.user_data.len);
+        dawn_print_hex("master recv:", dawn_master->user_data.buf, dawn_master->user_data.len);
         usleep(100*1000);
 
-        ret = dawn_transfer(&dawn_master, buf, dawn_master.user_data.len);
+        ret = dawn_transfer(dawn_master, dawn_master->user_data.buf, dawn_master->user_data.len);
         if (0!=ret) {
             st.transfer_failed++;
             st.failed;
@@ -229,29 +217,31 @@ int listenfd,connfd = -1;
             printf("accpet socket error: %s errno :%d\n",strerror(errno),errno);
             continue;
         }else{
+            dawn_context_t dawn_master;
+            int ret = 0;
+            uint8_t buf[MAXLINE];
+            dawn_master.mtu = 128;
+            dawn_master.retry_times = 3;
+            dawn_master.timeout_ms = 1000*10;
+            dawn_master.state = 0;
+            int on = 1;
+            setsockopt( connfd, IPPROTO_TCP, TCP_NODELAY, (void *)&on, sizeof(on));
+            ret = dawn_init_context(&dawn_master, dawn_example_master_read, dawn_example_master_write);
+            printf("new connection comming......\r\n");
+            dawn_master.user_data.buf = buf;
+            dawn_master.user_data.len = MAXLINE;
+
+            if (0!=ret) {
+                printf("dawn_init_context failed:%d\r\n", ret);
+                return 0;
+            }
+
             switch (test_type)
             {
                 case 0:
                 {
-                    dawn_context_t dawn_master;
                     char *str;
-                    int ret = 0;
-                    uint8_t buf[MAXLINE];
 
-                    dawn_master.mtu = 128;
-                    dawn_master.retry_times = 3;
-                    dawn_master.timeout_ms = 1000*10;
-                    dawn_master.state = 0;
-                    ret = dawn_init_context(&dawn_master, dawn_example_master_read, dawn_example_master_write);
-                    if (0!=ret) {
-                        printf("dawn_init_context failed:%d\r\n", ret);
-                        return 0;
-                    }
-
-                    printf("new connection comming......\r\n");
-
-                    dawn_master.user_data.buf = buf;
-                    dawn_master.user_data.len = MAXLINE;
                     printf("user data len:%d\r\n", dawn_master.user_data.len);
                     ret = dawn_receive(&dawn_master);
 
@@ -275,7 +265,7 @@ int listenfd,connfd = -1;
                     break;
                 case 1:
                 {
-                    stress_test(NULL);
+                    stress_test(&dawn_master);
                 }
                     break;
                 default:

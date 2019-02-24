@@ -1,17 +1,18 @@
 
 
 #include <stdio.h>
- #include <sys/socket.h>
- #include <sys/types.h>
- #include <stdlib.h>
- #include <netinet/in.h>
- #include <errno.h>
- #include <string.h>
- #include <arpa/inet.h>
- #include <unistd.h>
- #include <sys/time.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <stdlib.h>
+#include <netinet/in.h>
+#include <errno.h>
+#include <string.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <sys/time.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <netinet/tcp.h>
 
 #include "dawn.h"
 #include "platform.h"
@@ -226,6 +227,7 @@ void show_statistic(statistic_t *st){
     int opt = 1;
     int port = 1111;
     int test_type = 0;
+    int on = 1;
 
     // if(argc != 5)
     // {
@@ -280,6 +282,7 @@ void show_statistic(statistic_t *st){
 
 
     socketfd = socket(AF_INET,SOCK_STREAM,0);
+    setsockopt( socketfd, IPPROTO_TCP, TCP_NODELAY, (void *)&on, sizeof(on));
     memset(&sockaddr,0,sizeof(sockaddr));
     sockaddr.sin_family = AF_INET;
     sockaddr.sin_port = htons(port);
