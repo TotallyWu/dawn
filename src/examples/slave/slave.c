@@ -104,13 +104,26 @@ int32_t dawn_example_slave_read(void *buf, uint16_t len, uint16_t timeout_ms)
 int random_gen(void *p, uint16_t len){
     int ret = 0;
     int fd = 0;
-    fd = open("/dev/random", O_RDWR);
+    int offset = 0;
+    uint8_t *pa = (uint8_t *)p;
+
+    fd = open("/dev/random", O_RDONLY);
 
     if (fd <= 2) {
+        printf("open device[/dev/random] failed:%d %s", fd, strerror(errno));
         return -1;
     }
 
-    ret = read(fd, p, len);
+    // while(offset<len){
+        ret = read(fd, pa+offset, len);
+        // if (ret<0) {
+        //     break;
+        // }
+
+        // offset +=  ret;
+        // len -= ret;
+    // }
+
     close(fd);
 
     return ret;
@@ -133,14 +146,17 @@ int stress_test(dawn_context_t *ctx){
         goto out;
     }
 
+    len%=256;
+    printf("random len:%d\r\n", len);
     data = (uint8_t *)malloc(len);
     ret = random_gen(data, len);
 
     if (ret != len) {
-        ret = ERR_RANDOM;
-        goto out;
+        printf("return:%d vs exp:%d\r\n", ret, len);
     }
 
+    len = ret;
+    usleep(1000*100);
     ret = dawn_transfer(ctx, data, len);
 
     if (ret != 0) {
@@ -158,14 +174,13 @@ int stress_test(dawn_context_t *ctx){
         goto out;
     }
 
-    dawn_print_hex("recv data:\n", ctx->user_data.buf, ctx->user_data.len);
-
     if (ctx->user_data.len != len) {
         ret = ERR_MISMATCH;
         goto out;
     }
 
-    if (memcmp(data, ctx->user_data.len,len)) {
+    if (memcmp(data, ctx->user_data.buf,len)) {
+        dawn_print_hex("recv data:\n", ctx->user_data.buf, ctx->user_data.len);
         ret = ERR_MISMATCH;
         goto out;
     }
@@ -192,16 +207,16 @@ void show_statistic(statistic_t *st){
         return;
     }
 
-    printf("#########################################################\r\n");
-    printf("    Total:%d\r\n", st->total);
-    printf("    Success:%d  [%f\%]\r\n", st->total, (st->suc*1.0 / st->total)*100);
-    printf("    Failed:%d  [%f\%]\r\n", st->fail, (st->fail*1.0 / st->total)*100);
-    printf("    Random Failed:%d  [%f\%]\r\n", st->fail_random, (st->fail_random*1.0 / st->total)*100);
-    printf("    OOM Failed:%d  [%f\%]\r\n", st->fail_oom, (st->fail_oom*1.0 / st->total)*100);
-    printf("    Transfer Failed:%d  [%f\%]\r\n", st->fail_transfer, (st->fail_transfer*1.0 / st->total)*100);
-    printf("    Recv Failed:%d  [%f\%]\r\n", st->fail_recv, (st->fail_recv*1.0 / st->total)*100);
-    printf("    Mismatch Failed:%d  [%f\%]\r\n", st->fail_mismatch, (st->fail_mismatch*1.0 / st->total)*100);
-    printf("########################################################\r\n");
+    printf("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\n");
+    printf("        Total:%d\r\n", st->total);
+    printf("        Success:%d  [%f\%]\r\n", st->suc, (st->suc*1.0 / st->total)*100);
+    printf("        Failed:%d  [%f\%]\r\n", st->fail, (st->fail*1.0 / st->total)*100);
+    printf("        Random Failed:%d  [%f\%]\r\n", st->fail_random, (st->fail_random*1.0 / st->total)*100);
+    printf("        OOM Failed:%d  [%f\%]\r\n", st->fail_oom, (st->fail_oom*1.0 / st->total)*100);
+    printf("        Transfer Failed:%d  [%f\%]\r\n", st->fail_transfer, (st->fail_transfer*1.0 / st->total)*100);
+    printf("        Recv Failed:%d  [%f\%]\r\n", st->fail_recv, (st->fail_recv*1.0 / st->total)*100);
+    printf("        Mismatch Failed:%d  [%f\%]\r\n", st->fail_mismatch, (st->fail_mismatch*1.0 / st->total)*100);
+    printf("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\n");
 }
 
  int main(int argc,char **argv)
@@ -269,6 +284,7 @@ void show_statistic(statistic_t *st){
     sockaddr.sin_family = AF_INET;
     sockaddr.sin_port = htons(port);
     inet_pton(AF_INET,servInetAddr,&sockaddr.sin_addr);
+    printf("try to connect to %s:%d\r\n", servInetAddr, port);
     if((connect(socketfd,(struct sockaddr*)&sockaddr,sizeof(sockaddr))) < 0 )
     {
         printf("connect error %s errno: %d\n",strerror(errno),errno);
@@ -284,6 +300,11 @@ void show_statistic(statistic_t *st){
         dawn_slave.retry_times = 3;
         dawn_slave.timeout_ms = 1000*10;
         dawn_slave.state = 0;
+        ret = dawn_init_context(&dawn_slave, dawn_example_slave_read, dawn_example_slave_write);
+        if (0!=ret) {
+            printf("dawn_init_context failed:%d\r\n", ret);
+            return 0;
+        }
 
         switch(test_type) {
             default:
@@ -295,6 +316,9 @@ void show_statistic(statistic_t *st){
                 do
                 {
                     st.total++;
+                    printf("#######################################################################\r\n");
+                    printf("                    Round#%d\r\n", st.total);
+                    printf("#######################################################################\r\n");
                     ret = stress_test(&dawn_slave);
 
                     switch (ret)
@@ -324,7 +348,6 @@ void show_statistic(statistic_t *st){
                     }
 
                     show_statistic(&st);
-                    sleep(1);
                 } while (1);
 
             break;
@@ -332,12 +355,7 @@ void show_statistic(statistic_t *st){
 
         uint8_t buf[MAXLINE];
 
-        ret = dawn_init_context(&dawn_slave, dawn_example_slave_read, dawn_example_slave_write);
-        if (0!=ret) {
-            printf("dawn_init_context failed:%d\r\n", ret);
-            return 0;
-        }
-
+        usleep(200*1000);
         str = (char *)"Hello Iris! \nAre you okay? \nI have lots of things to talk with you.\r\n";
         ret = dawn_transfer(&dawn_slave, str, strlen(str));
         if (0!=ret) {

@@ -17,7 +17,7 @@
 
 int listenfd,connfd = -1;
 
- #define MAXLINE 1024*1024*10
+ #define MAXLINE 1000
 
  int32_t dawn_example_master_read(void *buf, uint16_t len, uint16_t timeout_ms)
  {
@@ -106,20 +106,19 @@ int listenfd,connfd = -1;
          return;
      }
 
-    printf("######################################################\r\n");
+    printf("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\n");
     printf("                    staticts\r\n");
-    printf("Total:%d\r\n", st->total);
-    printf("Success:%d      %f\r\n", st->suc, ((st->suc*1.0)/st->total) *100);
-    printf("Recv failed:%d      %f\r\n", st->recv_failed, ((st->recv_failed*1.0)/st->total) *100);
-    printf("Transfer failed:%d      %f\r\n", st->transfer_failed, ((st->transfer_failed*1.0)/st->total) *100);
-    printf("Failed:%d       %f\r\n", st->failed, ((st->failed*1.0)/st->total) *100);
-    printf("######################################################\r\n");
+    printf("        Total:%d\r\n", st->total);
+    printf("        Success:%d      [%f\%]\r\n", st->suc, ((st->suc*1.0)/st->total) *100);
+    printf("        Recv failed:%d      [%f\%]\r\n", st->recv_failed, ((st->recv_failed*1.0)/st->total) *100);
+    printf("        Transfer failed:%d      [%f\%]\r\n", st->transfer_failed, ((st->transfer_failed*1.0)/st->total) *100);
+    printf("        Failed:%d       [%f\%]\r\n", st->failed, ((st->failed*1.0)/st->total) *100);
+    printf("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\n");
  }
 
  void *stress_test(void *argv)
  {
     dawn_context_t dawn_master;
-    char *str;
     int ret = 0;
     uint8_t buf[MAXLINE];
     statistics_t st;
@@ -141,7 +140,7 @@ int listenfd,connfd = -1;
     {
         st.total++;
         printf("#######################################################################\r\n");
-        printf("                    Round->%d\r\n", st.total);
+        printf("                    Round#%d\r\n", st.total);
         printf("#######################################################################\r\n");
         ret = dawn_receive(&dawn_master);
 
@@ -149,12 +148,13 @@ int listenfd,connfd = -1;
             st.failed++;
             st.recv_failed++;
             printf("dawn_receive failed:%d\r\n", ret);
+            continue;
         }
 
         dawn_print_hex("master recv:", dawn_master.user_data.buf, dawn_master.user_data.len);
+        usleep(100*1000);
 
-        str = (char *)"Hello ALex! \nI am fine and you\nI would like to hear you with pleasure\r\n";
-        ret = dawn_transfer(&dawn_master, str, strlen(str));
+        ret = dawn_transfer(&dawn_master, buf, dawn_master.user_data.len);
         if (0!=ret) {
             st.transfer_failed++;
             st.failed;
@@ -164,6 +164,7 @@ int listenfd,connfd = -1;
             st.suc++;
         }
 
+        print_stics(&st);
     } while (1);
 
  }
@@ -175,10 +176,10 @@ int listenfd,connfd = -1;
     int port = 1111;
     int test_type = 0;
 
-
     #if 1
     do
     {
+        printf("argv[%d]:%s\r\n", opt, argv[opt]);
         if (argv[opt] ==NULL ||
         argv[opt][0] != '-'||
         argv[opt][2] != 0) {
@@ -220,7 +221,6 @@ int listenfd,connfd = -1;
     bind(listenfd,(struct sockaddr *) &sockaddr,sizeof(sockaddr));
     listen(listenfd,1024);
 
-
     for(;;)
     {
         printf("Please wait for the client information\n");
@@ -252,6 +252,7 @@ int listenfd,connfd = -1;
 
                     dawn_master.user_data.buf = buf;
                     dawn_master.user_data.len = MAXLINE;
+                    printf("user data len:%d\r\n", dawn_master.user_data.len);
                     ret = dawn_receive(&dawn_master);
 
                     if (0!=ret) {
@@ -274,13 +275,7 @@ int listenfd,connfd = -1;
                     break;
                 case 1:
                 {
-                    int ret = 0;
-                    pthread_t pid;
-                    ret = pthread_create(&pid, NULL, stress_test, NULL);
-                    if (ret != 0) {
-                        dawn_printf("pthread_create failed!%d<>%s\r\n", errno, strerror(errno));
-                        exit(0);
-                    }
+                    stress_test(NULL);
                 }
                     break;
                 default:
