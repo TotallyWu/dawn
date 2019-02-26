@@ -16,8 +16,10 @@ loop:
 
     if (1 != ret) {
         dawn_printf("ctx->read failed:%d\r\n", ret);
-        ret = DAWN_ERR_RECV_FAILED;
-        goto out;
+        if (count++ > ctx->retry_times) {
+            ret = DAWN_ERR_RECV_FAILED;
+            goto out;
+        }
     }
 
     if (sig != signal) {
@@ -154,6 +156,7 @@ int32_t _dawn_hang_up(dawn_context_t *ctx)
 int32_t dawn_transfer(dawn_context_t *ctx, void *data, uint16_t len){
     int32_t ret = 0;
     uint16_t count = 0;
+    uint16_t retry = 0;
     uint8_t *pData = (uint8_t *)data;
     if (NULL==ctx ||NULL == data || len == 0 || ctx->write == NULL ||ctx->read == NULL) {
         ret = -1;
@@ -184,7 +187,6 @@ int32_t dawn_transfer(dawn_context_t *ctx, void *data, uint16_t len){
 
         len -= ctx->mtu;
         pData += ctx->mtu;
-
         ret = _dawn_send_mtu(ctx);
 
         if (0!= ret) {
@@ -250,7 +252,9 @@ int32_t dawn_receive(dawn_context_t *ctx){
     uint8_t *tmp=NULL;
     uint16_t tmp_len = 0;
 
-    if (NULL==ctx ||NULL == ctx->user_data.buf || ctx->user_data.len == 0 || ctx->write == NULL ||ctx->read == NULL) {
+    if (NULL==ctx ||NULL == ctx->user_data.buf || ctx->user_data.len == 0 ||
+            ctx->write == NULL ||ctx->read == NULL) {
+        dawn_printf("invalid parameters\r\n");
         ret = -1;
         goto out;
     }

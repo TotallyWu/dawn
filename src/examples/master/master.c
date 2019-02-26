@@ -3,12 +3,15 @@
 #include <sys/types.h>
 #include <string.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <sys/time.h>
 #include <unistd.h>
+#include <pthread.h>
+
 
  #include "dawn.h"
  #include "platform.h"
@@ -16,7 +19,7 @@
 
 int listenfd,connfd = -1;
 
- #define MAXLINE 1024
+ #define MAXLINE 1000
 
  int32_t dawn_example_master_read(void *buf, uint16_t len, uint16_t timeout_ms)
  {
@@ -89,6 +92,69 @@ int listenfd,connfd = -1;
      fprintf(stdout, "master usage\r\n");
      fprintf(stdout, "master [option]\r\n");
      fprintf(stdout, "-p port, default is 6666 \r\n");
+     fprintf(stdout, "-t test type, default is 0 1 for stress test \r\n");
+ }
+
+ typedef struct statistics_t{
+     uint32_t total;
+     uint32_t failed;
+     uint32_t suc;
+     uint32_t recv_failed;
+     uint32_t transfer_failed;
+ }statistics_t;
+
+ void print_stics(statistics_t *st){
+     if (NULL == st) {
+         return;
+     }
+
+    printf("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\n");
+    printf("                    staticts\r\n");
+    printf("        Total:%d\r\n", st->total);
+    printf("        Success:%d      [%f\%]\r\n", st->suc, ((st->suc*1.0)/st->total) *100);
+    printf("        Recv failed:%d      [%f\%]\r\n", st->recv_failed, ((st->recv_failed*1.0)/st->total) *100);
+    printf("        Transfer failed:%d      [%f\%]\r\n", st->transfer_failed, ((st->transfer_failed*1.0)/st->total) *100);
+    printf("        Failed:%d       [%f\%]\r\n", st->failed, ((st->failed*1.0)/st->total) *100);
+    printf("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\n");
+ }
+
+ void *stress_test(dawn_context_t *dawn_master)
+ {
+    int ret = 0;
+    statistics_t st;
+
+    memset(&st, 0x00, sizeof(st));
+    do
+    {
+        st.total++;
+        printf("#######################################################################\r\n");
+        printf("                    Round#%d\r\n", st.total);
+        printf("#######################################################################\r\n");
+        ret = dawn_receive(dawn_master);
+
+        if (0!=ret) {
+            st.failed++;
+            st.recv_failed++;
+            printf("dawn_receive failed:%d\r\n", ret);
+            continue;
+        }
+
+        dawn_print_hex("master recv:", dawn_master->user_data.buf, dawn_master->user_data.len);
+        usleep(100*1000);
+
+        ret = dawn_transfer(dawn_master, dawn_master->user_data.buf, dawn_master->user_data.len);
+        if (0!=ret) {
+            st.transfer_failed++;
+            st.failed;
+            printf("dawn_transfer failed:%d\r\n", ret);
+        }else
+        {
+            st.suc++;
+        }
+
+        print_stics(&st);
+    } while (1);
+
  }
 
  int main(int argc, char **argv)
@@ -96,16 +162,18 @@ int listenfd,connfd = -1;
     struct sockaddr_in sockaddr;
     int opt = 1;
     int port = 1111;
+    int test_type = 0;
 
+    #if 1
     do
     {
+        printf("argv[%d]:%s\r\n", opt, argv[opt]);
         if (argv[opt] ==NULL ||
         argv[opt][0] != '-'||
         argv[opt][2] != 0) {
             print_usage();
             break;
         }
-
         switch (argv[opt][1])
         {
             case 'p':
@@ -115,6 +183,14 @@ int listenfd,connfd = -1;
                     exit(0);
                 }
                 port = atoi(argv[opt]);
+                break;
+            case 't':
+                opt++;
+                 if (opt>argc) {
+                    print_usage();
+                    exit(0);
+                }
+                test_type = atoi(argv[opt]);
                 break;
             default:
                 print_usage();
@@ -133,7 +209,6 @@ int listenfd,connfd = -1;
     bind(listenfd,(struct sockaddr *) &sockaddr,sizeof(sockaddr));
     listen(listenfd,1024);
 
-
     for(;;)
     {
         printf("Please wait for the client information\n");
@@ -143,45 +218,63 @@ int listenfd,connfd = -1;
             continue;
         }else{
             dawn_context_t dawn_master;
-            char *str;
             int ret = 0;
             uint8_t buf[MAXLINE];
-
             dawn_master.mtu = 128;
             dawn_master.retry_times = 3;
             dawn_master.timeout_ms = 1000*10;
             dawn_master.state = 0;
+            int on = 1;
+            setsockopt( connfd, IPPROTO_TCP, TCP_NODELAY, (void *)&on, sizeof(on));
             ret = dawn_init_context(&dawn_master, dawn_example_master_read, dawn_example_master_write);
+            printf("new connection comming......\r\n");
+            dawn_master.user_data.buf = buf;
+            dawn_master.user_data.len = MAXLINE;
+
             if (0!=ret) {
                 printf("dawn_init_context failed:%d\r\n", ret);
                 return 0;
             }
 
-            printf("new connection comming......\r\n");
+            switch (test_type)
+            {
+                case 0:
+                {
+                    char *str;
 
-            dawn_master.user_data.buf = buf;
-            dawn_master.user_data.len = MAXLINE;
-            ret = dawn_receive(&dawn_master);
+                    printf("user data len:%d\r\n", dawn_master.user_data.len);
+                    ret = dawn_receive(&dawn_master);
 
-            if (0!=ret) {
-                printf("dawn_receive failed:%d\r\n", ret);
-                return 0;
+                    if (0!=ret) {
+                        printf("dawn_receive failed:%d\r\n", ret);
+                        return 0;
+                    }
+
+                    dawn_print_hex("master recv:", dawn_master.user_data.buf, dawn_master.user_data.len);
+                    printf("master receive:%s\r\n", (char *)dawn_master.user_data.buf);
+
+                    str = (char *)"Hello ALex! \nI am fine and you\nI would like to hear you with pleasure\r\n";
+                    ret = dawn_transfer(&dawn_master, str, strlen(str));
+                    if (0!=ret) {
+                        printf("dawn_transfer failed:%d\r\n", ret);
+                        return 0;
+                    }
+
+                    close(connfd);
+                }
+                    break;
+                case 1:
+                {
+                    stress_test(&dawn_master);
+                }
+                    break;
+                default:
+                    break;
             }
-
-            dawn_print_hex("master recv:", dawn_master.user_data.buf, dawn_master.user_data.len);
-            printf("master receive:%s\r\n", (char *)dawn_master.user_data.buf);
-
-            str = (char *)"Hello ALex! \nI am fine and you\nI would like to hear you with pleasure\r\n";
-            ret = dawn_transfer(&dawn_master, str, strlen(str));
-            if (0!=ret) {
-                printf("dawn_transfer failed:%d\r\n", ret);
-                return 0;
-            }
-
-            close(connfd);
         }
 
 
     }
     close(listenfd);
+    #endif
  }
